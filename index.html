@@ -503,7 +503,13 @@ function boxBlur3(raw, W, H) {
 }
 
 /* k-means (k=2) on a deterministic subsample of the blurred image,
-   farthest-point initialisation (no RNG needed). Returns two centroids. */
+   farthest-point initialisation (no RNG needed). Returns two centroids.
+   c0 seeds at the sample MEAN (a stable, representative point) rather than
+   an arbitrary pixel, since seeding at idxs[0] (effectively the image's
+   top-left corner after subsampling) made convergence fragile on images
+   with a color gradient running through that corner -- e.g. a photographed
+   open ledger book, where the corner sits in a shadow/table-edge transition
+   zone, biased the whole partition and cut real page content off one side. */
 function kmeans2Centroids(blurred, W, H, iterations) {
   var total = W * H;
   var stride = Math.max(1, Math.floor(total / 4000));
@@ -513,7 +519,10 @@ function kmeans2Centroids(blurred, W, H, iterations) {
 
   function at(k, c) { return blurred[idxs[k] * 3 + c]; }
 
-  var c0 = [at(0, 0), at(0, 1), at(0, 2)];
+  var mr = 0, mg = 0, mb = 0;
+  for (var k = 0; k < n; k++) { mr += at(k, 0); mg += at(k, 1); mb += at(k, 2); }
+  mr /= n; mg /= n; mb /= n;
+  var c0 = [mr, mg, mb];
   var maxD = -1, farIdx = 0;
   for (var k = 0; k < n; k++) {
     var dr = at(k, 0) - c0[0], dg = at(k, 1) - c0[1], db = at(k, 2) - c0[2];
