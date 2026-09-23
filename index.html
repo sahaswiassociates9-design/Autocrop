@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocCrop</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0e1117;
+  --surface: #161b27;
+  --border: #242d3f;
+  --text: #e8edf5;
+  --muted: #6b7a9a;
+  --accent: #3b82f6;
+  --accent-low: rgba(59,130,246,.13);
+  --green: #10b981;
+  --card: #1a2133;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
+  padding: 28px 16px 100px;
+}
+
+/* ── Header ───────────────────────────────── */
+header { text-align: center; margin-bottom: 36px; }
+.logo {
+  font-size: 24px; font-weight: 600; color: var(--accent);
+  letter-spacing: -.5px; display: inline-flex; align-items: center; gap: 8px;
+}
+.logo-icon { font-size: 22px; }
+.tagline { font-size: 13px; color: var(--muted); margin-top: 6px; }
+
+/* ── Drop zone ────────────────────────────── */
+#drop-zone {
+  max-width: 540px; margin: 0 auto 24px;
+  border: 2px dashed var(--border);
+  border-radius: 16px;
+  padding: 44px 24px;
+  text-align: center;
+  cursor: pointer;
+  background: var(--surface);
+  transition: border-color .2s, background .2s;
+  user-select: none;
+}
+#drop-zone.over { border-color: var(--accent); background: var(--accent-low); }
+.dz-icon { font-size: 42px; margin-bottom: 14px; }
+.dz-title { font-size: 15px; font-weight: 500; margin-bottom: 7px; }
+.dz-sub { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+/* ── Controls ─────────────────────────────── */
+#controls {
+  max-width: 540px; margin: 0 auto 28px;
+  display: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 18px;
+  align-items: center; gap: 14px; flex-wrap: wrap;
+  font-size: 13px;
+}
+#controls.visible { display: flex; }
+#controls label { color: var(--muted); white-space: nowrap; }
+#pad-range { width: 90px; accent-color: var(--accent); cursor: pointer; }
+#pad-val { color: var(--text); min-width: 28px; }
+#sens-select {
+  background: var(--card); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  font-family: inherit; font-size: 12px;
+  padding: 4px 8px; cursor: pointer;
+}
+.ctrl-sep { width: 1px; height: 18px; background: var(--border); }
+.ctrl-note { margin-left: auto; font-size: 11px; color: var(--muted); opacity: .6; }
+
+/* ── Grid ─────────────────────────────────── */
+#grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 18px;
+  max-width: 1140px;
+  margin: 0 auto;
+}
+
+/* ── Card ─────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  transition: border-color .25s;
+}
+.card.done { border-color: var(--green); }
+.card.err  { border-color: #ef4444; }
+
+.preview {
+  position: relative;
+  height: 210px;
+  background: #090c14;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.preview img {
+  max-width: 100%; max-height: 100%;
+  object-fit: contain; display: block;
+}
+
+/* loading overlay */
+.ld-overlay {
+  position: absolute; inset: 0;
+  background: rgba(9,12,20,.82);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px;
+}
+.ld-text { font-size: 12px; color: var(--muted); }
+.spinner {
+  width: 32px; height: 32px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Compare chip */
+.cmp-btn {
+  position: absolute; top: 8px; right: 8px;
+  background: rgba(0,0,0,.62);
+  border: 1px solid rgba(255,255,255,.18);
+  color: rgba(255,255,255,.88);
+  font-size: 11px; font-family: inherit;
+  padding: 3px 9px; border-radius: 20px;
+  cursor: pointer; backdrop-filter: blur(6px);
+  transition: background .15s;
+  display: none;
+}
+.cmp-btn:hover { background: rgba(0,0,0,.9); }
+.card.done .cmp-btn { display: block; }
+
+/* Crop info badge */
+.crop-badge {
+  position: absolute; top: 8px; left: 8px;
+  background: rgba(16,185,129,.18);
+  border: 1px solid rgba(16,185,129,.35);
+  color: #34d399;
+  font-size: 10px; font-family: inherit; font-weight: 500;
+  padding: 2px 7px; border-radius: 20px;
+  display: none;
+}
+.card.done .crop-badge { display: block; }
+
+/* Card footer */
+.card-footer {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+.card-name {
+  flex: 1; font-size: 12px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.card-dims { font-size: 11px; color: var(--muted); opacity: .55; white-space: nowrap; }
+.card-dl {
+  background: var(--accent); color: #fff;
+  border: none; border-radius: 7px;
+  font-size: 12px; font-family: inherit; font-weight: 500;
+  padding: 5px 12px; cursor: pointer;
+  transition: opacity .15s; white-space: nowrap;
+  flex-shrink: 0;
+}
+.card-dl:hover { opacity: .85; }
+.card-dl:disabled { opacity: .32; cursor: default; }
+
+/* ── Bottom bar ────────────────────────────── */
+#bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 12px 20px;
+  display: none;
+  align-items: center; justify-content: center; gap: 16px;
+  z-index: 100;
+}
+#bar.visible { display: flex; }
+#bar-status { font-size: 13px; color: var(--muted); }
+#btn-zip {
+  background: var(--green); color: #fff;
+  border: none; border-radius: 10px;
+  font-family: inherit; font-size: 14px; font-weight: 600;
+  padding: 10px 22px; cursor: pointer;
+  transition: opacity .15s;
+}
+#btn-zip:hover { opacity: .87; }
+#btn-zip:disabled { opacity: .35; cursor: default; }
+
+/* ── Toast ─────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 80px; left: 50%;
+  transform: translateX(-50%) translateY(14px);
+  background: #1e293b; color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px; padding: 9px 18px;
+  font-size: 13px; opacity: 0;
+  transition: all .3s; pointer-events: none;
+  white-space: nowrap; z-index: 200;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+#file-input { display: none; }
+
+@media (max-width: 480px) {
+  #grid { grid-template-columns: 1fr; }
+  .preview { height: 240px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span class="logo-icon">✂</span> DocCrop</div>
+  <div class="tagline">Auto-crop document photos · remove backgrounds from letters, Aadhaar cards, IDs</div>
+</header>
+
+<div id="drop-zone">
+  <div class="dz-icon">🖼️</div>
+  <div class="dz-title">Drop document photos here</div>
+  <div class="dz-sub">JPG · PNG · WebP · Multiple files OK<br>Click to browse &nbsp;·&nbsp; Works offline — nothing is uploaded</div>
+</div>
+
+<div id="controls">
+  <label for="pad-range">Padding</label>
+  <input type="range" id="pad-range" min="0" max="12" value="1" step="1">
+  <span id="pad-val">1%</span>
+  <span class="ctrl-sep"></span>
+  <label for="sens-select">Sensitivity</label>
+  <select id="sens-select">
+    <option value="high">High (dark bg)</option>
+    <option value="medium" selected>Medium</option>
+    <option value="low">Low (similar tones)</option>
+  </select>
+  <span class="ctrl-note">Re-upload to reprocess with new settings</span>
+</div>
+
+<div id="grid"></div>
+
+<div id="bar">
+  <span id="bar-status"></span>
+  <button id="btn-zip" disabled>⬇ Download all (.zip)</button>
+</div>
+
+<div id="toast"></div>
+<input type="file" id="file-input" accept="image/*" multiple>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+(function () {
+'use strict';
+
+/* ── State ─────────────────────────────────────────────────────── */
+var items = [];      // {file, img, origUrl, croppedUrl, blob, crop, card, showing}
+var padding = 1;
+var sensitivity = 'medium'; // 'high'|'medium'|'low'
+var doneCount = 0;
+var downloadsApi = null;
+var toastTimer = null;
+
+/* ── Init downloads API ────────────────────────────────────────── */
+try {
+  if (window.claude && typeof window.claude.use === 'function') {
+    window.claude.use('downloads').then(function (api) { downloadsApi = api; }).catch(function () {});
+  }
+} catch (e) {}
+
+/* ── DOM refs ──────────────────────────────────────────────────── */
+var dropZone  = document.getElementById('drop-zone');
+var fileInput = document.getElementById('file-input');
+var controls  = document.getElementById('controls');
+var padRange  = document.getElementById('pad-range');
+var padVal    = document.getElementById('pad-val');
+var sensSelect = document.getElementById('sens-select');
+var grid      = document.getElementById('grid');
+var bar       = document.getElementById('bar');
+var barStatus = document.getElementById('bar-status');
+var btnZip    = document.getElementById('btn-zip');
+var toast     = document.getElementById('toast');
+
+/* ── Drop zone ─────────────────────────────────────────────────── */
+dropZone.addEventListener('click', function () { fileInput.click(); });
+dropZone.addEventListener('dragover', function (e) {
+  e.preventDefault(); dropZone.classList.add('over');
+});
+dropZone.addEventListener('dragleave', function () {
+  dropZone.classList.remove('over');
+});
+dropZone.addEventListener('drop', function (e) {
+  e.preventDefault(); dropZone.classList.remove('over');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', function () {
+  handleFiles(this.files); this.value = '';
+});
+
+padRange.addEventListener('input', function () {
+  padding = parseInt(this.value, 10);
+  padVal.textContent = padding + '%';
+});
+sensSelect.addEventListener('change', function () {
+  sensitivity = this.value;
+});
+
+btnZip.addEventListener('click', downloadAllZip);
+
+/* ── File handling ─────────────────────────────────────────────── */
+function handleFiles(files) {
+  var arr = Array.from(files).filter(function (f) {
+    return f.type.startsWith('image/');
+  });
+  if (!arr.length) return;
+  controls.classList.add('visible');
+  bar.classList.add('visible');
+  arr.forEach(addItem);
+}
+
+function addItem(file) {
+  var card = makeCard(file.name);
+  grid.appendChild(card.el);
+
+  var item = {
+    file: file, img: null,
+    origUrl: null, croppedUrl: null, blob: null,
+    crop: null, card: card, showing: 'cropped',
+    fullImage: false
+  };
+  items.push(item);
+
+  var url = URL.createObjectURL(file);
+  item.origUrl = url;
+
+  var img = new Image();
+  img.onload = function () {
+    item.img = img;
+    card.ld.querySelector('.ld-text').textContent = 'Detecting…';
+    detectCrop(img, padding).then(function (crop) {
+      item.crop = crop;
+      var ow = img.naturalWidth, oh = img.naturalHeight;
+      item.fullImage = (crop.x < 5 && crop.y < 5 &&
+                        crop.w > ow * 0.94 && crop.h > oh * 0.94);
+      return applyCrop(img, crop);
+    }).then(function (blob) {
+      item.blob = blob;
+      item.croppedUrl = URL.createObjectURL(blob);
+      card.img.src = item.croppedUrl;
+      var w = item.crop.w, h = item.crop.h;
+      card.dims.textContent = w + '×' + h;
+      var saved = calcSaved(item.img, item.crop);
+      card.badge.textContent = item.fullImage ? 'Full image' : ('−' + saved + '%');
+      card.ld.style.display = 'none';
+      card.el.classList.add('done');
+      card.dl.disabled = false;
+      doneCount++;
+      updateBar();
+    }).catch(function (err) {
+      console.error(err);
+      card.ld.innerHTML = '<span style="color:#ef4444;font-size:12px;padding:12px;text-align:center">Processing failed</span>';
+      card.el.classList.add('err');
+    });
+  };
+  img.onerror = function () {
+    card.ld.innerHTML = '<span style="color:#ef4444;font-size:12px;padding:12px;text-align:center">Could not load image</span>';
+    card.el.classList.add('err');
+  };
+  img.src = url;
+
+  /* ── Compare toggle ── */
+  card.cmp.addEventListener('click', function () {
+    if (item.showing === 'cropped') {
+      card.img.src = item.origUrl;
+      card.cmp.textContent = 'Show cropped';
+      item.showing = 'original';
+    } else {
+      card.img.src = item.croppedUrl;
+      card.cmp.textContent = 'Compare';
+      item.showing = 'cropped';
+    }
+  });
+
+  /* ── Per-card download ── */
+  card.dl.addEventListener('click', function () { downloadItem(item); });
+}
+
+/* ── Savings % ─────────────────────────────────────────────────── */
+function calcSaved(img, crop) {
+  var orig = img.naturalWidth * img.naturalHeight;
+  var cropped = crop.w * crop.h;
+  return Math.round((1 - cropped / orig) * 100);
+}
+
+/* ── Card factory ──────────────────────────────────────────────── */
+function makeCard(name) {
+  var el = document.createElement('div');
+  el.className = 'card';
+
+  /* preview */
+  var preview = document.createElement('div');
+  preview.className = 'preview';
+
+  var img = document.createElement('img');
+  img.alt = name;
+
+  var ld = document.createElement('div');
+  ld.className = 'ld-overlay';
+  ld.innerHTML = '<div class="spinner"></div><div class="ld-text">Loading…</div>';
+
+  var cmp = document.createElement('button');
+  cmp.className = 'cmp-btn'; cmp.textContent = 'Compare';
+
+  var badge = document.createElement('div');
+  badge.className = 'crop-badge';
+
+  preview.appendChild(img);
+  preview.appendChild(ld);
+  preview.appendChild(cmp);
+  preview.appendChild(badge);
+
+  /* footer */
+  var footer = document.createElement('div');
+  footer.className = 'card-footer';
+
+  var nameEl = document.createElement('span');
+  nameEl.className = 'card-name';
+  nameEl.textContent = name; nameEl.title = name;
+
+  var dims = document.createElement('span');
+  dims.className = 'card-dims';
+
+  var dl = document.createElement('button');
+  dl.className = 'card-dl'; dl.textContent = '↓ Save'; dl.disabled = true;
+
+  footer.appendChild(nameEl);
+  footer.appendChild(dims);
+  footer.appendChild(dl);
+
+  el.appendChild(preview);
+  el.appendChild(footer);
+
+  return { el: el, img: img, ld: ld, cmp: cmp, badge: badge, dims: dims, dl: dl };
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Document detector: global 2-class colour segmentation.
+
+   A single "background is darker/lighter" rule breaks constantly —
+   fabric weave, wood grain and marble veining all fool a naive
+   threshold in different ways. Instead this models the WHOLE photo as
+   two colour populations (k-means, k=2), decides which population is
+   the document by checking which one dominates a small patch at the
+   photo's centre (documents are photographed roughly centred), then
+   sharpens that boundary with a Gaussian (Mahalanobis) re-classification
+   using each population's own colour covariance. This is a compact,
+   from-scratch version of the "foreground/background colour model"
+   idea behind tools like GrabCut, without the heavy graph-cut solver.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* 3x3 box blur (separable), suppresses fine background texture (weave,
+   grain) while leaving a large uniform document region essentially
+   unchanged. Operates on a flat Float32Array [r,g,b,r,g,b,...]. */
+function boxBlur3(raw, W, H) {
+  var tmp = new Float32Array(W * H * 3);
+  var out = new Float32Array(W * H * 3);
+  var x, y, c, i;
+  /* horizontal pass */
+  for (y = 0; y < H; y++) {
+    for (x = 0; x < W; x++) {
+      var x0 = Math.max(0, x - 1), x1 = Math.min(W - 1, x + 1);
+      var n = x1 - x0 + 1;
+      var base = (y * W + x) * 3;
+      for (c = 0; c < 3; c++) {
+        var s = 0;
+        for (var xx = x0; xx <= x1; xx++) s += raw[(y * W + xx) * 3 + c];
+        tmp[base + c] = s / n;
+      }
+    }
+  }
+  /* vertical pass */
+  for (y = 0; y < H; y++) {
+    var y0 = Math.max(0, y - 1), y1 = Math.min(H - 1, y + 1);
+    var ny = y1 - y0 + 1;
+    for (x = 0; x < W; x++) {
+      var base2 = (y * W + x) * 3;
+      for (c = 0; c < 3; c++) {
+        var s2 = 0;
+        for (var yy = y0; yy <= y1; yy++) s2 += tmp[(yy * W + x) * 3 + c];
+        out[base2 + c] = s2 / ny;
+      }
+    }
+  }
+  return out;
+}
+
+/* k-means (k=2) on a deterministic subsample of the blurred image,
+   farthest-point initialisation (no RNG needed). Returns two centroids. */
+function kmeans2Centroids(blurred, W, H, iterations) {
+  var total = W * H;
+  var stride = Math.max(1, Math.floor(total / 4000));
+  var idxs = [];
+  for (var i = 0; i < total; i += stride) idxs.push(i);
+  var n = idxs.length;
+
+  function at(k, c) { return blurred[idxs[k] * 3 + c]; }
+
+  var c0 = [at(0, 0), at(0, 1), at(0, 2)];
+  var maxD = -1, farIdx = 0;
+  for (var k = 0; k < n; k++) {
+    var dr = at(k, 0) - c0[0], dg = at(k, 1) - c0[1], db = at(k, 2) - c0[2];
+    var d = dr * dr + dg * dg + db * db;
+    if (d > maxD) { maxD = d; farIdx = k; }
+  }
+  var c1 = [at(farIdx, 0), at(farIdx, 1), at(farIdx, 2)];
+
+  var assign = new Uint8Array(n);
+  for (var it = 0; it < iterations; it++) {
+    for (k = 0; k < n; k++) {
+      var r = at(k, 0), g = at(k, 1), b = at(k, 2);
+      var d0 = (r - c0[0]) * (r - c0[0]) + (g - c0[1]) * (g - c0[1]) + (b - c0[2]) * (b - c0[2]);
+      var d1 = (r - c1[0]) * (r - c1[0]) + (g - c1[1]) * (g - c1[1]) + (b - c1[2]) * (b - c1[2]);
+      assign[k] = d1 < d0 ? 1 : 0;
+    }
+    var s0 = [0, 0, 0], s1 = [0, 0, 0], n0 = 0, n1 = 0;
+    for (k = 0; k < n; k++) {
+      var rr = at(k, 0), gg = at(k, 1), bb = at(k, 2);
+      if (assign[k] === 0) { s0[0] += rr; s0[1] += gg; s0[2] += bb; n0++; }
+      else { s1[0] += rr; s1[1] += gg; s1[2] += bb; n1++; }
+    }
+    if (n0 > 0) c0 = [s0[0] / n0, s0[1] / n0, s0[2] / n0];
+    if (n1 > 0) c1 = [s1[0] / n1, s1[1] / n1, s1[2] / n1];
+  }
+  return [c0, c1];
+}
+
+/* Closed-form 3x3 matrix inverse (flat row-major 9-element arrays). */
+function invert3x3(m) {
+  var a = m[0], b = m[1], c = m[2];
+  var d = m[3], e = m[4], f = m[5];
+  var g = m[6], h = m[7], ii = m[8];
+  var A = e * ii - f * h, B = -(d * ii - f * g), C = d * h - e * g;
+  var det = a * A + b * B + c * C;
+  if (Math.abs(det) < 1e-6) det = 1e-6;
+  var invDet = 1 / det;
+  var D = -(b * ii - c * h), E = a * ii - c * g, F = -(a * h - b * g);
+  var G = b * f - c * e, H = -(a * f - c * d), I = a * e - b * d;
+  return [A * invDet, D * invDet, G * invDet,
+          B * invDet, E * invDet, H * invDet,
+          C * invDet, F * invDet, I * invDet];
+}
+
+/* Mean + inverse covariance of the blurred pixels where mask===wantVal. */
+function gaussianStats(blurred, W, H, mask, wantVal) {
+  var n = W * H;
+  var sr = 0, sg = 0, sb = 0, cnt = 0;
+  var i;
+  for (i = 0; i < n; i++) {
+    if (mask[i] === wantVal) {
+      sr += blurred[i * 3]; sg += blurred[i * 3 + 1]; sb += blurred[i * 3 + 2];
+      cnt++;
+    }
+  }
+  if (cnt < 20) return null;
+  var mr = sr / cnt, mg = sg / cnt, mb = sb / cnt;
+
+  var cxx = 0, cxy = 0, cxz = 0, cyy = 0, cyz = 0, czz = 0;
+  for (i = 0; i < n; i++) {
+    if (mask[i] === wantVal) {
+      var dr = blurred[i * 3] - mr, dg = blurred[i * 3 + 1] - mg, db = blurred[i * 3 + 2] - mb;
+      cxx += dr * dr; cxy += dr * dg; cxz += dr * db;
+      cyy += dg * dg; cyz += dg * db; czz += db * db;
+    }
+  }
+  var reg = 4.0; /* regularisation, matches verified Python prototype */
+  var cov = [
+    cxx / cnt + reg, cxy / cnt, cxz / cnt,
+    cxy / cnt, cyy / cnt + reg, cyz / cnt,
+    cxz / cnt, cyz / cnt, czz / cnt + reg
+  ];
+  return { mean: [mr, mg, mb], covInv: invert3x3(cov) };
+}
+
+/* Mahalanobis distance of every pixel to a Gaussian (mean, covInv). */
+function mahalanobisMap(blurred, W, H, stats) {
+  var n = W * H;
+  var out = new Float32Array(n);
+  var mean = stats.mean, ci = stats.covInv;
+  for (var i = 0; i < n; i++) {
+    var dr = blurred[i * 3] - mean[0], dg = blurred[i * 3 + 1] - mean[1], db = blurred[i * 3 + 2] - mean[2];
+    var t0 = ci[0] * dr + ci[1] * dg + ci[2] * db;
+    var t1 = ci[3] * dr + ci[4] * dg + ci[5] * db;
+    var t2 = ci[6] * dr + ci[7] * dg + ci[8] * db;
+    var dist2 = dr * t0 + dg * t1 + db * t2;
+    out[i] = dist2 > 0 ? Math.sqrt(dist2) : 0;
+  }
+  return out;
+}
+
+/* Keep only the largest 4-connected component of a boolean mask (flat
+   Uint8Array). Flood fill via BFS with a plain array as queue. */
+function keepLargestComponent(mask, W, H) {
+  var n = W * H;
+  var labels = new Int32Array(n); /* 0 = unlabeled */
+  var sizes = [0]; /* sizes[0] unused */
+  var nextLabel = 1;
+  var queue = new Int32Array(n);
+
+  for (var start = 0; start < n; start++) {
+    if (!mask[start] || labels[start] !== 0) continue;
+    var qHead = 0, qTail = 0;
+    queue[qTail++] = start;
+    labels[start] = nextLabel;
+    var size = 0;
+    while (qHead < qTail) {
+      var idx = queue[qHead++];
+      size++;
+      var x = idx % W, y = (idx / W) | 0;
+      if (x > 0)     { var l = idx - 1;  if (mask[l] && labels[l] === 0) { labels[l] = nextLabel; queue[qTail++] = l; } }
+      if (x < W - 1) { var r = idx + 1;  if (mask[r] && labels[r] === 0) { labels[r] = nextLabel; queue[qTail++] = r; } }
+      if (y > 0)     { var u = idx - W;  if (mask[u] && labels[u] === 0) { labels[u] = nextLabel; queue[qTail++] = u; } }
+      if (y < H - 1) { var d = idx + W;  if (mask[d] && labels[d] === 0) { labels[d] = nextLabel; queue[qTail++] = d; } }
+    }
+    sizes.push(size);
+    nextLabel++;
+  }
+
+  var bestLabel = 0, bestSize = 0;
+  for (var lab = 1; lab < sizes.length; lab++) {
+    if (sizes[lab] > bestSize) { bestSize = sizes[lab]; bestLabel = lab; }
+  }
+  var out = new Uint8Array(n);
+  if (bestLabel > 0) {
+    for (var i = 0; i < n; i++) out[i] = labels[i] === bestLabel ? 1 : 0;
+  }
+  return out;
+}
+
+/* Binary opening (erode then dilate) with a 4-neighbour (+) structuring
+   element, iterated a few times — strips thin noise bridges before
+   connected-component extraction without eating into the solid blob. */
+function binaryOpen(mask, W, H, iterations) {
+  var cur = mask;
+  for (var it = 0; it < iterations; it++) cur = erode4(cur, W, H);
+  for (it = 0; it < iterations; it++) cur = dilate4(cur, W, H);
+  return cur;
+}
+function erode4(mask, W, H) {
+  var out = new Uint8Array(W * H);
+  for (var y = 0; y < H; y++) {
+    for (var x = 0; x < W; x++) {
+      var idx = y * W + x;
+      if (!mask[idx]) continue;
+      var ok = (x > 0 ? mask[idx - 1] : 0) && (x < W - 1 ? mask[idx + 1] : 0) &&
+               (y > 0 ? mask[idx - W] : 0) && (y < H - 1 ? mask[idx + W] : 0);
+      out[idx] = ok ? 1 : 0;
+    }
+  }
+  return out;
+}
+function dilate4(mask, W, H) {
+  var out = new Uint8Array(W * H);
+  for (var y = 0; y < H; y++) {
+    for (var x = 0; x < W; x++) {
+      var idx = y * W + x;
+      var v = mask[idx] || (x > 0 && mask[idx - 1]) || (x < W - 1 && mask[idx + 1]) ||
+              (y > 0 && mask[idx - W]) || (y < H - 1 && mask[idx + W]);
+      out[idx] = v ? 1 : 0;
+    }
+  }
+  return out;
+}
+
+/* Seal interior holes (text glyphs, QR modules, a passport photo inside a
+   card) by filling each row and each column between its first and last
+   foreground pixel. Unlike a border flood-fill, this still works when a
+   hole sits close enough to the document's own edge that it "leaks" to
+   the outside through a thin channel — exactly the case a passport photo
+   printed near a card's edge creates. */
+function spanFill(mask, W, H) {
+  var out = new Uint8Array(mask);
+  var x, y;
+  for (y = 0; y < H; y++) {
+    var first = -1, last = -1;
+    for (x = 0; x < W; x++) {
+      if (mask[y * W + x]) { if (first === -1) first = x; last = x; }
+    }
+    if (first !== -1 && last > first) {
+      for (x = first; x <= last; x++) out[y * W + x] = 1;
+    }
+  }
+  for (x = 0; x < W; x++) {
+    var firstY = -1, lastY = -1;
+    for (y = 0; y < H; y++) {
+      if (mask[y * W + x]) { if (firstY === -1) firstY = y; lastY = y; }
+    }
+    if (firstY !== -1 && lastY > firstY) {
+      for (y = firstY; y <= lastY; y++) out[y * W + x] = 1;
+    }
+  }
+  return out;
+}
+
+/* ── Crop detection: ties the pipeline together ──────────────────── */
+function detectCrop(img, pad) {
+  return new Promise(function (resolve) {
+    setTimeout(function () {
+      var ow = img.naturalWidth, oh = img.naturalHeight;
+      var maxDim = 700;
+      var scale = Math.min(1, maxDim / Math.max(ow, oh));
+      var W = Math.round(ow * scale);
+      var H = Math.round(oh * scale);
+
+      var canvas = document.createElement('canvas');
+      canvas.width = W; canvas.height = H;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, W, H);
+      var pix = ctx.getImageData(0, 0, W, H).data;
+
+      var raw = new Float32Array(W * H * 3);
+      for (var p = 0, q = 0; p < pix.length; p += 4, q += 3) {
+        raw[q] = pix[p]; raw[q + 1] = pix[p + 1]; raw[q + 2] = pix[p + 2];
+      }
+      var blurred = boxBlur3(raw, W, H);
+
+      /* 1) Global 2-colour segmentation */
+      var centroids = kmeans2Centroids(blurred, W, H, 6);
+      var mask = new Uint8Array(W * H);
+      for (var i = 0; i < W * H; i++) {
+        var r = blurred[i * 3], g = blurred[i * 3 + 1], b = blurred[i * 3 + 2];
+        var d0 = (r - centroids[0][0]) * (r - centroids[0][0]) + (g - centroids[0][1]) * (g - centroids[0][1]) + (b - centroids[0][2]) * (b - centroids[0][2]);
+        var d1 = (r - centroids[1][0]) * (r - centroids[1][0]) + (g - centroids[1][1]) * (g - centroids[1][1]) + (b - centroids[1][2]) * (b - centroids[1][2]);
+        mask[i] = d1 < d0 ? 1 : 0;
+      }
+
+      /* 2) Which cluster is the document? Whichever dominates a small
+         patch at the photo's centre (docs are shot roughly centred). */
+      var cx0 = Math.floor(W * 0.42), cx1 = Math.floor(W * 0.58);
+      var cy0 = Math.floor(H * 0.42), cy1 = Math.floor(H * 0.58);
+      var onSum = 0, onCnt = 0;
+      for (var yy = cy0; yy < cy1; yy++) {
+        for (var xx = cx0; xx < cx1; xx++) {
+          onSum += mask[yy * W + xx]; onCnt++;
+        }
+      }
+      var fgLabel = (onCnt > 0 && onSum / onCnt > 0.5) ? 1 : 0;
+      var fgMask = new Uint8Array(W * H);
+      for (i = 0; i < W * H; i++) fgMask[i] = mask[i] === fgLabel ? 1 : 0;
+
+      /* 3) Sharpen the boundary with 2 rounds of Gaussian (Mahalanobis)
+         re-classification, using each side's own colour covariance —
+         sensitivity controls how many rounds run (more = tighter but
+         slightly more sensitive to genuinely ambiguous photos). */
+      var refineRounds = sensitivity === 'high' ? 3 : (sensitivity === 'low' ? 1 : 2);
+      for (var round = 0; round < refineRounds; round++) {
+        var fgStats = gaussianStats(blurred, W, H, fgMask, 1);
+        var bgStats = gaussianStats(blurred, W, H, fgMask, 0);
+        if (!fgStats || !bgStats) break;
+        var dFg = mahalanobisMap(blurred, W, H, fgStats);
+        var dBg = mahalanobisMap(blurred, W, H, bgStats);
+        var newMask = new Uint8Array(W * H);
+        for (i = 0; i < W * H; i++) newMask[i] = dFg[i] < dBg[i] ? 1 : 0;
+        newMask = keepLargestComponent(newMask, W, H);
+        var nonzero = 0;
+        for (i = 0; i < W * H; i++) if (newMask[i]) nonzero++;
+        if (nonzero < 20) break; /* degenerate — keep previous mask */
+        fgMask = newMask;
+      }
+
+      /* 4) Clean up: strip thin noise bridges, keep only the single
+         largest blob, then seal interior holes (text/QR/photo) with a
+         span-fill that works even when a hole sits close to the
+         document's own edge. */
+      fgMask = binaryOpen(fgMask, W, H, 2);
+      fgMask = keepLargestComponent(fgMask, W, H);
+      fgMask = spanFill(fgMask, W, H);
+
+      /* 5) Row/column density projection → bounding box. The threshold is
+         RELATIVE to each axis's own peak count, not a fixed % of image
+         size — this is what correctly tells a solid document body (near
+         100% of peak) apart from a spurious low-density spur, such as a
+         reflection or a background object that happens to share the
+         document's colour and stays weakly connected to it (occupying
+         only a fraction of each row/column it touches). */
+      var rowCount = new Float32Array(H), colCount = new Float32Array(W);
+      for (var y2 = 0; y2 < H; y2++) {
+        for (var x2 = 0; x2 < W; x2++) {
+          if (fgMask[y2 * W + x2]) { rowCount[y2]++; colCount[x2]++; }
+        }
+      }
+      var rowPeak = 0, colPeak = 0;
+      for (var k1 = 0; k1 < H; k1++) if (rowCount[k1] > rowPeak) rowPeak = rowCount[k1];
+      for (var k2 = 0; k2 < W; k2++) if (colCount[k2] > colPeak) colPeak = colCount[k2];
+
+      var relDensity = sensitivity === 'high' ? 0.4 : (sensitivity === 'low' ? 0.6 : 0.5);
+      var rowMin = rowPeak * relDensity, colMin = colPeak * relDensity;
+      var y0 = 0, y1 = H - 1, x0 = 0, x1 = W - 1;
+      while (y0 < H - 1 && rowCount[y0] < rowMin) y0++;
+      while (y1 > 0     && rowCount[y1] < rowMin) y1--;
+      while (x0 < W - 1 && colCount[x0] < colMin) x0++;
+      while (x1 > 0     && colCount[x1] < colMin) x1--;
+
+      if (y1 <= y0 + 20 || x1 <= x0 + 20) {
+        resolve({ x: 0, y: 0, w: ow, h: oh });
+        return;
+      }
+
+      var pw = pad / 100;
+      var padPx = Math.round((x1 - x0) * pw) + 2;
+      var padPy = Math.round((y1 - y0) * pw) + 2;
+      var fcx  = Math.max(0, x0 - padPx);
+      var fcy  = Math.max(0, y0 - padPy);
+      var fcx2 = Math.min(W, x1 + padPx);
+      var fcy2 = Math.min(H, y1 + padPy);
+
+      resolve({
+        x: Math.round(fcx  / scale),
+        y: Math.round(fcy  / scale),
+        w: Math.round((fcx2 - fcx) / scale),
+        h: Math.round((fcy2 - fcy) / scale)
+      });
+    }, 0);
+  });
+}
+
+/* ── Apply crop to full-res image ──────────────────────────────── */
+function applyCrop(img, crop) {
+  var canvas = document.createElement('canvas');
+  canvas.width  = crop.w;
+  canvas.height = crop.h;
+  var ctx = canvas.getContext('2d');
+  ctx.drawImage(img, crop.x, crop.y, crop.w, crop.h, 0, 0, crop.w, crop.h);
+  return new Promise(function (resolve) {
+    canvas.toBlob(function (blob) { resolve(blob); }, 'image/jpeg', 0.93);
+  });
+}
+
+/* ── Bar ───────────────────────────────────────────────────────── */
+function updateBar() {
+  barStatus.textContent = doneCount + ' / ' + items.length + ' ready';
+  btnZip.disabled = doneCount < 1;
+}
+
+/* ── Download helpers ──────────────────────────────────────────── */
+function fallbackDownload(blob, filename) {
+  try {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 2000);
+    return true;
+  } catch (e) { return false; }
+}
+
+function downloadItem(item) {
+  if (!item.blob) return;
+  var base = item.file.name.replace(/\.[^.]+$/, '');
+  var filename = base + '_cropped.jpg';
+
+  if (downloadsApi) {
+    downloadsApi.save({ filename: filename, data: item.blob }).catch(function (err) {
+      if (err && err.code === 'declined') return;
+      fallbackDownload(item.blob, filename);
+    });
+  } else {
+    if (!fallbackDownload(item.blob, filename)) {
+      showToast('Download not supported here — try opening in a browser tab.');
+    }
+  }
+}
+
+function downloadAllZip() {
+  var ready = items.filter(function (it) { return !!it.blob; });
+  if (!ready.length) return;
+
+  btnZip.disabled = true;
+  btnZip.textContent = 'Zipping…';
+
+  var zip = new JSZip();
+  ready.forEach(function (item) {
+    var base = item.file.name.replace(/\.[^.]+$/, '');
+    zip.file(base + '_cropped.jpg', item.blob);
+  });
+
+  zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 3 } })
+    .then(function (zipBlob) {
+      if (downloadsApi) {
+        downloadsApi.save({ filename: 'cropped_docs.zip', data: zipBlob }).catch(function () {
+          fallbackDownload(zipBlob, 'cropped_docs.zip');
+        });
+      } else {
+        if (!fallbackDownload(zipBlob, 'cropped_docs.zip')) {
+          showToast('Download not supported here — try opening in a browser tab.');
+        }
+      }
+    })
+    .catch(function (e) { showToast('Zip failed: ' + e.message); })
+    .finally(function () {
+      btnZip.disabled = false;
+      btnZip.textContent = '⬇ Download all (.zip)';
+    });
+}
+
+/* ── Toast ─────────────────────────────────────────────────────── */
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 4000);
+}
+
+})();
+</script>
+</body>
+</html>
